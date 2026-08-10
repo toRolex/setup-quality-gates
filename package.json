@@ -1,0 +1,9 @@
+{
+  "name": "setup-quality-gates-test-env",
+  "private": true,
+  "description": "Test-only toolchain for the TS/dual-stack quality-gate fixtures (biome + typescript). Not shipped to target projects.",
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "typescript": "^5.6.3"
+  }
+}

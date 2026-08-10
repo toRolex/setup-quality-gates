@@ -17,3 +17,12 @@
 python:lint:ruff check .
 python:format:ruff format --check .
 python:typecheck:ty check .
+
+# TypeScript (issue #3). biome lint / biome format run from the repo root; the
+# fixture/project is expected to carry its own biome defaults or config and a
+# tsconfig.json for tsc. Any tool missing from the environment makes its stage
+# fail and the gate reports that stage.
+
+ts:lint:biome lint .
+ts:format:biome format .
+ts:typecheck:tsc --noEmit

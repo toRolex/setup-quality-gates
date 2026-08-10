@@ -7,3 +7,7 @@ tests/fixtures/**/.git/
 .pytest_cache/
 .ruff_cache/
 __pycache__/
+
+# TS test toolchain (biome + tsc) installed by `pnpm install` (package.json).
+# The lockfile is versioned; the installed tree is not.
+node_modules/
