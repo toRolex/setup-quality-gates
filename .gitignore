@@ -1,0 +1,9 @@
+# Fixture repos are standalone git repos (so gate.sh treats each fixture as its
+# own repo root); ignore their .git dirs so this repo does not see embedded repos.
+tests/fixtures/**/.git/
+
+# Tool caches produced when the gate and the test suite run (ruff cache in the
+# fixture repos, pytest/bytecode caches in this repo).
+.pytest_cache/
+.ruff_cache/
+__pycache__/

@@ -1,0 +1,19 @@
+[project]
+name = "setup-quality-gates"
+version = "0.0.0"
+description = "Reusable skill: installs a commit-time quality gate (lint -> format -> typecheck) into a target project."
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+# Test environment for issue #2 (T1). The gate.sh hook itself is bash;
+# ruff + ty here provide the tools the Python step chain actually invokes,
+# and pytest drives the fixtures against gate.sh.
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "ty>=0.0.9",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
