@@ -26,3 +26,12 @@ python:typecheck:ty check .
 ts:lint:biome lint .
 ts:format:biome format .
 ts:typecheck:tsc --noEmit
+
+# JavaScript (issue #4). A JS stack is linted/formatted by biome exactly like
+# TS, but it has no typechecker: the typecheck stage is a documented no-op
+# (`true`) so gate.sh's uniform lint -> format -> typecheck chain stays intact
+# for every stack. Setup maps a user-declared "js" stack to these entries.
+
+js:lint:biome lint .
+js:format:biome format .
+js:typecheck:true

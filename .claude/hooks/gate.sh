@@ -121,6 +121,14 @@ fi
 # Locate the repo root so the gate checks the whole repo, not just the cwd.
 REPO_ROOT="$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$CWD")"
 
+# The TS/JS stages run biome/tsc, which the setup flow (#4) installs as project
+# devDependencies (node_modules/.bin). Prepend the repo's own node_modules/.bin
+# so the gate resolves project-local tools without requiring a global install or
+# a manual PATH edit. A missing dir is a harmless no-op entry.
+if [ -d "$REPO_ROOT/node_modules/.bin" ]; then
+    export PATH="$REPO_ROOT/node_modules/.bin:$PATH"
+fi
+
 tool_map_lookup() {
     # usage: tool_map_lookup <stack> <stage>
     # Fixed-string match (no regex surprises) then keep everything after the

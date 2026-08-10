@@ -23,8 +23,9 @@ GATE_SH = REPO_ROOT / ".claude" / "hooks" / "gate.sh"
 TOOL_MAP = REPO_ROOT / ".claude" / "hooks" / "tool_map.sh"
 PY_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "python"
 TS_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "ts"
+JS_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "js"
 BOTH_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "both"
-FIXTURE_ROOTS = (PY_FIXTURES, TS_FIXTURES, BOTH_FIXTURES)
+FIXTURE_ROOTS = (PY_FIXTURES, TS_FIXTURES, JS_FIXTURES, BOTH_FIXTURES)
 # Local TS toolchain (biome + tsc) installed at the repo root (package.json +
 # pnpm-lock.yaml). Prepended to PATH so the ts:* tool-map commands resolve to the
 # real binaries — the gate is exercised end to end, never mocked.
@@ -255,6 +256,42 @@ def test_ts_non_commit_commands_skip_the_gate() -> None:
 
 
 # ---------------------------------------------------------------------------
+# JS stack (issue #4): biome lint / biome format, typecheck is a documented
+# no-op (`true`) because JS has no typechecker
+# ---------------------------------------------------------------------------
+
+
+def test_js_clean_passes() -> None:
+    proc = run_gate("clean", f'git commit -m "{COMMIT_MSG}"', fixtures=JS_FIXTURES, stack="js")
+    assert proc.returncode == 0, proc.stderr
+    assert "GATE FAILED" not in proc.stderr
+
+
+@pytest.mark.parametrize(
+    ("fixture", "expected_stage", "diagnostic"),
+    [
+        ("lint-dirty", "lint", "noDebugger"),
+        ("format-dirty", "format", "Formatter would have printed"),
+    ],
+)
+def test_js_dirty_fixture_fails_at_expected_stage(
+    fixture: str, expected_stage: str, diagnostic: str
+) -> None:
+    proc = run_gate(fixture, f'git commit -m "{COMMIT_MSG}"', fixtures=JS_FIXTURES, stack="js")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert f"GATE FAILED at js:{expected_stage}" in proc.stderr
+    assert diagnostic in proc.stderr
+    # Fail-fast: the js:typecheck no-op stage is never reached.
+    assert "GATE FAILED at js:typecheck" not in proc.stderr
+
+
+def test_js_non_commit_commands_skip_the_gate() -> None:
+    proc = run_gate("lint-dirty", "git status", fixtures=JS_FIXTURES, stack="js")
+    assert proc.returncode == 0, proc.stderr
+    assert "GATE FAILED" not in proc.stderr
+
+
+# ---------------------------------------------------------------------------
 # dual stack (issue #3): QUALITY_GATE_STACK="python,ts" runs both step chains
 # ---------------------------------------------------------------------------
 
@@ -352,6 +389,10 @@ def test_tool_map_is_the_single_source_for_commands() -> None:
     assert "biome lint ." in map_text
     assert "biome format ." in map_text
     assert "tsc --noEmit" in map_text
+    # JavaScript stack (issue #4): biome for lint/format, no-op typecheck.
+    assert "js:lint:biome lint ." in map_text
+    assert "js:format:biome format ." in map_text
+    assert "js:typecheck:true" in map_text
 
     gate_text = GATE_SH.read_text()
     # The commands must live only in tool_map.sh, not be duplicated in gate.sh.
@@ -362,5 +403,8 @@ def test_tool_map_is_the_single_source_for_commands() -> None:
         "biome lint .",
         "biome format .",
         "tsc --noEmit",
+        "js:lint:",
+        "js:format:",
+        "js:typecheck:",
     ):
         assert command not in gate_text
