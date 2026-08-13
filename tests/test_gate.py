@@ -21,6 +21,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GATE_SH = REPO_ROOT / ".claude" / "hooks" / "gate.sh"
 TOOL_MAP = REPO_ROOT / ".claude" / "hooks" / "tool_map.sh"
+SETUP_SH = REPO_ROOT / "setup.sh"
 PY_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "python"
 TS_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "ts"
 JS_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "js"
@@ -395,7 +396,9 @@ def test_tool_map_is_the_single_source_for_commands() -> None:
     assert "js:typecheck:true" in map_text
 
     gate_text = GATE_SH.read_text()
-    # The commands must live only in tool_map.sh, not be duplicated in gate.sh.
+    setup_text = SETUP_SH.read_text()
+    # The commands must live only in tool_map.sh, not be duplicated in gate.sh
+    # or setup.sh.
     for command in (
         "ruff check .",
         "ruff format --check .",
@@ -408,3 +411,60 @@ def test_tool_map_is_the_single_source_for_commands() -> None:
         "js:typecheck:",
     ):
         assert command not in gate_text
+        assert command not in setup_text
+
+
+# ---------------------------------------------------------------------------
+# tool map as the stack registry: install records and stage records agree
+# ---------------------------------------------------------------------------
+
+STAGE_KEYS = ("lint", "format", "typecheck")
+# Install strategies setup.sh knows how to dispatch: "uv" (uv tool install)
+# and "node" (probed pnpm/npm with the add/install verb).
+KNOWN_INSTALL_STRATEGIES = ("uv", "node")
+
+
+def _tool_map_rows() -> list[list[str]]:
+    """Data rows of tool_map.sh as colon-split fields (comments/blanks dropped)."""
+    rows = []
+    for line in TOOL_MAP.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        rows.append(line.split(":"))
+    return rows
+
+
+def test_tool_map_is_the_stack_registry() -> None:
+    rows = _tool_map_rows()
+    # Every data row is a known record kind: a stage row or an install row.
+    # A typo'd kind ("installer", "lintt") must not slip through.
+    for row in rows:
+        assert len(row) >= 3, f"malformed row: {row}"
+        assert row[1] in (*STAGE_KEYS, "install"), f"unknown record kind: {row}"
+
+    stacks = sorted({row[0] for row in rows})
+    for stack in stacks:
+        # The uniform step chain: every stack runs lint -> format -> typecheck.
+        stage_rows = {row[1]: row for row in rows if row[0] == stack and row[1] in STAGE_KEYS}
+        assert set(stage_rows) == set(STAGE_KEYS), f"{stack}: incomplete step chain"
+        # Every stack declares at least one install record, and each one is
+        # well-formed: <stack>:install:<tool>:<strategy>:<package>.
+        install_rows = [row for row in rows if row[0] == stack and row[1] == "install"]
+        assert install_rows, f"{stack}: no install records"
+        install_tools = set()
+        for row in install_rows:
+            assert len(row) >= 5, f"malformed install row: {row}"
+            assert row[3] in KNOWN_INSTALL_STRATEGIES, f"unknown install strategy: {row}"
+            package = ":".join(row[4:])
+            assert package, f"empty package in install row: {row}"
+            install_tools.add(row[2])
+        # Every tool a stage command invokes must be installable from the map,
+        # so a clean environment can be set up. `true` (the js typecheck no-op)
+        # is not a tool.
+        for row in stage_rows.values():
+            command = ":".join(row[2:])
+            tool = command.split()[0]
+            if tool == "true":
+                continue
+            assert tool in install_tools, f"{stack}:{row[1]} invokes {tool!r} with no install record"

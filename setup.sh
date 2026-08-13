@@ -3,17 +3,23 @@
 # setup.sh — install a commit-time quality gate into a target project.
 #
 # Part of the setup-quality-gates skill (issue #4). The skill is this repo; the
-# flow is: confirm the stack (user declaration, never auto-detected) -> pick the
-# tool-map commands -> install missing tools -> write .claude/settings.json +
-# copy .claude/hooks/gate.sh & tool_map.sh -> self-verify the written gate once.
+# flow is: confirm the stack (user declaration, never auto-detected, validated
+# against the tool map) -> install the tools the map declares for that stack ->
+# write .claude/settings.json + copy .claude/hooks/gate.sh & tool_map.sh ->
+# self-verify the written gate once.
+#
+# setup.sh holds no stack knowledge of its own: tool_map.sh is the stack
+# registry (which stacks exist, their stage commands, their install specs).
+# What lives here is environment knowledge: the install strategies ("uv",
+# "node") and how to detect a node package manager.
 #
 # Usage:
 #   setup.sh [--target <dir>] [--stack <stacks>] [--no-install] [--no-self-verify]
 #
 # Options:
 #   --target <dir>     Target project directory (default: current directory).
-#   --stack <stacks>   Confirmed stack(s): comma-separated subset of
-#                      python, ts, js (e.g. "python", "python,ts", "js").
+#   --stack <stacks>   Confirmed stack(s): comma-separated stack names as
+#                      declared in tool_map.sh (e.g. "python", "python,ts").
 #                      If omitted, setup prompts interactively. The user's
 #                      declaration is authoritative — setup never probes the
 #                      filesystem to guess the stack.
@@ -33,27 +39,37 @@ usage() {
     sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'
 }
 
+# known_stacks -> newline-separated stack names declared in the tool map.
+# The map is the only place stack names live.
+known_stacks() {
+    grep -v '^#' "$SRC_TOOL_MAP" | grep -v '^[[:space:]]*$' | cut -d: -f1 | sort -u
+}
+
+# known_stacks_display -> comma-separated stack names for prompts/errors.
+known_stacks_display() {
+    known_stacks | paste -sd, - | tr -d ' '
+}
+
 # normalize_stacks <raw> -> comma-separated canonical list on stdout.
 # Empty entries from stray separators ("python,,ts", "python,ts,") are skipped.
-# Returns 0 if every token is a known stack, 1 otherwise.
+# Returns 0 if every token is a stack declared in the tool map, 1 otherwise.
 normalize_stacks() {
     local raw="$1" out="" tok
+    local valid
+    valid="$(known_stacks)"
     local IFS=','
     for tok in $raw; do
         [ -z "$tok" ] && continue
         tok="${tok//[[:space:]]/}"
-        case "$tok" in
-            python | ts | js)
-                if [ -z "$out" ]; then
-                    out="$tok"
-                else
-                    out="$out,$tok"
-                fi
-                ;;
-            *)
-                return 1
-                ;;
-        esac
+        if printf '%s\n' "$valid" | grep -qx "$tok"; then
+            if [ -z "$out" ]; then
+                out="$tok"
+            else
+                out="$out,$tok"
+            fi
+        else
+            return 1
+        fi
     done
     [ -n "$out" ] || return 1
     echo "$out"
@@ -63,9 +79,11 @@ normalize_stacks() {
 # gives up (3 attempts) / the --stack value is invalid.
 resolve_stacks() {
     local raw="$1"
+    local valid_display
+    valid_display="$(known_stacks_display)"
     if [ -n "$raw" ]; then
         if ! STACKS="$(normalize_stacks "$raw")"; then
-            echo "setup: invalid --stack '$raw' — expected a comma-separated subset of python, ts, js." >&2
+            echo "setup: invalid --stack '$raw' — expected a comma-separated subset of: $valid_display." >&2
             exit 2
         fi
         return 0
@@ -73,12 +91,12 @@ resolve_stacks() {
     STACKS=""
     local attempt line
     for attempt in 1 2 3; do
-        printf 'Target project tech stack? (comma-separated subset of python, ts, js — e.g. "python,ts"): ' >&2
+        printf 'Target project tech stack? (comma-separated subset of: %s — e.g. the first two): ' "$valid_display" >&2
         read -r line || true
         if STACKS="$(normalize_stacks "$line")"; then
             return 0
         fi
-        echo "setup: invalid stack '$line' — expected a comma-separated subset of python, ts, js." >&2
+        echo "setup: invalid stack '$line' — expected a comma-separated subset of: $valid_display." >&2
         STACKS=""
     done
     echo "setup: no valid stack confirmed; aborting." >&2
@@ -119,7 +137,7 @@ ensure_tool() {
     return 0
 }
 
-pick_ts_pm() {
+pick_node_pm() {
     if command -v pnpm >/dev/null 2>&1; then
         echo "pnpm"
     elif command -v npm >/dev/null 2>&1; then
@@ -127,37 +145,39 @@ pick_ts_pm() {
     fi
 }
 
+# install_tools <stack> — read the stack's install rows from the tool map and
+# dispatch each to its strategy. setup.sh knows strategies (environment
+# knowledge), never stacks: adding a stack that reuses an existing strategy is
+# a tool_map.sh-only change.
 install_tools() {
-    local stack="$1" pm add_cmd
-    case "$stack" in
-        python)
-            ensure_tool "ruff" "uv" tool install ruff
-            ensure_tool "ty" "uv" tool install ty
-            ;;
-        ts)
-            pm="$(pick_ts_pm)"
-            if [ -z "$pm" ]; then
-                echo "  WARNING: cannot install biome/tsc — neither pnpm nor npm on PATH." >&2
-                return 0
-            fi
-            # pnpm installs devDeps with `add`; npm has no `add` subcommand, it
-            # uses `install`. The command verb must match the package manager.
-            add_cmd="add"
-            [ "$pm" = "npm" ] && add_cmd="install"
-            ensure_tool "biome" "$pm" "$add_cmd" -D @biomejs/biome
-            ensure_tool "tsc" "$pm" "$add_cmd" -D typescript
-            ;;
-        js)
-            pm="$(pick_ts_pm)"
-            if [ -z "$pm" ]; then
-                echo "  WARNING: cannot install biome — neither pnpm nor npm on PATH." >&2
-                return 0
-            fi
-            add_cmd="add"
-            [ "$pm" = "npm" ] && add_cmd="install"
-            ensure_tool "biome" "$pm" "$add_cmd" -D @biomejs/biome
-            ;;
-    esac
+    local stack="$1"
+    local row tool strategy package
+    grep -F "${stack}:install:" "$SRC_TOOL_MAP" | while IFS= read -r row; do
+        tool="$(printf '%s' "$row" | cut -d: -f3)"
+        strategy="$(printf '%s' "$row" | cut -d: -f4)"
+        package="$(printf '%s' "$row" | cut -d: -f5-)"
+        case "$strategy" in
+            uv)
+                ensure_tool "$tool" uv tool install "$package"
+                ;;
+            node)
+                local pm add_cmd
+                pm="$(pick_node_pm)"
+                if [ -z "$pm" ]; then
+                    echo "  WARNING: cannot install $tool — neither pnpm nor npm on PATH." >&2
+                    continue
+                fi
+                # pnpm installs devDeps with `add`; npm has no `add` subcommand,
+                # it uses `install`. The command verb must match the pm.
+                add_cmd="add"
+                [ "$pm" = "npm" ] && add_cmd="install"
+                ensure_tool "$tool" "$pm" "$add_cmd" -D "$package"
+                ;;
+            *)
+                echo "  WARNING: unknown install strategy '$strategy' in tool map row '$row'." >&2
+                ;;
+        esac
+    done
 }
 
 # write_settings <target> <stack> — generate/merge .claude/settings.json.
@@ -235,9 +255,9 @@ if not replaced:
 data["hooks"]["PreToolUse"] = kept
 
 with open(settings_path, "w", encoding="utf-8") as f:
-    # Tab-indent on purpose: the TS/JS gate runs `biome format .` (tool-map
-    # command), whose default formatter uses tabs and would flag a
-    # space-indented settings.json on the very first commit. Writing tabs keeps
+    # Tab-indent on purpose: the TS/JS gate's biome format stage (a tool-map
+    # command) uses tabs by default and would flag a space-indented
+    # settings.json on the very first commit. Writing tabs keeps
     # setup's own artifact clean under the gate it installs.
     json.dump(data, f, indent="\t")
     f.write("\n")
@@ -322,8 +342,6 @@ main() {
         exit 2
     }
 
-    resolve_stacks "$STACK_RAW"
-
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     SRC_GATE="$SCRIPT_DIR/.claude/hooks/gate.sh"
     SRC_TOOL_MAP="$SCRIPT_DIR/.claude/hooks/tool_map.sh"
@@ -331,6 +349,8 @@ main() {
         echo "setup: cannot find gate.sh/tool_map.sh next to setup.sh ($SCRIPT_DIR/.claude/hooks/)" >&2
         exit 2
     fi
+
+    resolve_stacks "$STACK_RAW"
 
     echo "setup: installing quality gate into $TARGET"
     echo "  confirmed stack(s): $STACKS"
