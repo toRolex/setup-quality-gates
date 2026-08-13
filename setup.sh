@@ -5,8 +5,8 @@
 # Part of the setup-quality-gates skill (issue #4). The skill is this repo; the
 # flow is: confirm the stack (user declaration, never auto-detected, validated
 # against the tool map) -> install the tools the map declares for that stack ->
-# write .claude/settings.json + copy .claude/hooks/gate.sh & tool_map.sh ->
-# self-verify the written gate once.
+# write .claude/settings.json + copy .claude/hooks/gate.sh, gate_parse.py &
+# tool_map.sh -> self-verify the written gate once.
 #
 # setup.sh holds no stack knowledge of its own: tool_map.sh is the stack
 # registry (which stacks exist, their stage commands, their install specs).
@@ -344,9 +344,10 @@ main() {
 
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     SRC_GATE="$SCRIPT_DIR/.claude/hooks/gate.sh"
+    SRC_GATE_PARSE="$SCRIPT_DIR/.claude/hooks/gate_parse.py"
     SRC_TOOL_MAP="$SCRIPT_DIR/.claude/hooks/tool_map.sh"
-    if [ ! -f "$SRC_GATE" ] || [ ! -f "$SRC_TOOL_MAP" ]; then
-        echo "setup: cannot find gate.sh/tool_map.sh next to setup.sh ($SCRIPT_DIR/.claude/hooks/)" >&2
+    if [ ! -f "$SRC_GATE" ] || [ ! -f "$SRC_GATE_PARSE" ] || [ ! -f "$SRC_TOOL_MAP" ]; then
+        echo "setup: cannot find gate.sh/gate_parse.py/tool_map.sh next to setup.sh ($SCRIPT_DIR/.claude/hooks/)" >&2
         exit 2
     fi
 
@@ -380,12 +381,16 @@ main() {
         echo "setup: failed to copy gate.sh" >&2
         exit 2
     }
+    cp "$SRC_GATE_PARSE" "$TARGET/.claude/hooks/gate_parse.py" || {
+        echo "setup: failed to copy gate_parse.py" >&2
+        exit 2
+    }
     cp "$SRC_TOOL_MAP" "$TARGET/.claude/hooks/tool_map.sh" || {
         echo "setup: failed to copy tool_map.sh" >&2
         exit 2
     }
     chmod +x "$TARGET/.claude/hooks/gate.sh"
-    echo "  copied .claude/hooks/gate.sh + .claude/hooks/tool_map.sh"
+    echo "  copied .claude/hooks/gate.sh + .claude/hooks/gate_parse.py + .claude/hooks/tool_map.sh"
 
     if ! write_settings "$TARGET" "$STACKS"; then
         echo "setup: aborting." >&2

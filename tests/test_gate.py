@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -187,6 +188,40 @@ def test_git_with_option_value_or_prefix_still_triggers_gate() -> None:
         proc = run_gate("lint-dirty", command)
         assert proc.returncode == 2, f"{command!r}: {proc.stderr}"
         assert "GATE FAILED at python:lint" in proc.stderr
+
+
+# ---------------------------------------------------------------------------
+# fail-open: a missing parser must never block every Bash call
+# ---------------------------------------------------------------------------
+
+
+def test_missing_parser_fails_open(tmp_path: Path) -> None:
+    # gate.sh calls the extracted commit detector (gate_parse.py) living next to
+    # it. If that file is missing, the gate must fail OPEN (exit 0 + warning) —
+    # the same portability decision as a missing python3, so a broken install
+    # can never block every Bash tool call. Run gate.sh from an isolated dir
+    # that has tool_map.sh but NOT gate_parse.py; lint-dirty would exit 2 if the
+    # gate actually ran, so exit 0 proves the fail-open.
+    isolated = tmp_path / "hooks"
+    isolated.mkdir()
+    shutil.copy(GATE_SH, isolated / "gate.sh")
+    shutil.copy(TOOL_MAP, isolated / "tool_map.sh")
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": f'git commit -m "{COMMIT_MSG}"'},
+        "cwd": str(PY_FIXTURES / "lint-dirty"),
+    }
+    proc = subprocess.run(
+        ["bash", str(isolated / "gate.sh")],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "GATE WARNING" in proc.stderr
+    assert "gate_parse.py" in proc.stderr
 
 
 # ---------------------------------------------------------------------------

@@ -38,71 +38,22 @@ TOOL_MAP="$HOOK_DIR/tool_map.sh"
 STACKS="${QUALITY_GATE_STACK:-python}"
 
 # --- parse the PreToolUse payload ------------------------------------------
-# Emits two lines on stdout:
+# The commit detector lives in gate_parse.py next to this script (issue #7, T5)
+# so it is covered by ruff/ty instead of being an inline heredoc. It emits two
+# lines on stdout:
 #   line 1: "1" if the command invokes `git commit`, else "0"
 #   line 2: the cwd from the event
-PY_PARSE=$(cat <<'PY'
-import json
-import shlex
-import sys
-
-SEPARATORS = {"&&", "||", ";", "|"}
-GIT_OPTS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"}
-GIT_PREFIXES = {"sudo", "env", "command", "nohup", "time", "builtin"}
-
-
-def command_contains_commit(command):
-    try:
-        # punctuation_chars is a constructor arg (read-only property on Python 3.14+).
-        lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
-        lexer.whitespace_split = True
-        tokens = list(lexer)
-    except ValueError:
-        return False
-    for i, token in enumerate(tokens):
-        if token != "git":
-            continue
-        prev = tokens[i - 1] if i > 0 else None
-        if prev is not None and prev not in SEPARATORS and prev not in GIT_PREFIXES:
-            continue
-        j = i + 1
-        while j < len(tokens) and tokens[j] not in SEPARATORS:
-            t = tokens[j]
-            if t in GIT_OPTS_WITH_VALUE:
-                j += 2
-            elif t.startswith("-") and "=" not in t:
-                j += 1
-            else:
-                break
-        if j < len(tokens) and tokens[j] == "commit":
-            return True
-    return False
-
-
-def main():
-    try:
-        data = json.loads(sys.stdin.read())
-    except Exception:
-        print("0")
-        print(".")
-        return
-    if data.get("tool_name") != "Bash":
-        print("0")
-        print(".")
-        return
-    tool_input = data.get("tool_input") or {}
-    command = tool_input.get("command") or ""
-    cwd = data.get("cwd") or "."
-    print("1" if command_contains_commit(command) else "0")
-    print(cwd)
-
-
-main()
-PY
-)
+PARSER="$HOOK_DIR/gate_parse.py"
 
 if ! command -v python3 >/dev/null 2>&1; then
     echo "GATE WARNING: python3 not found; quality gate disabled (fail open)." >&2
+    exit 0
+fi
+
+# Same fail-open decision as a missing python3: if the parser file itself is
+# missing or unreadable the gate must not block every Bash tool call.
+if [ ! -r "$PARSER" ]; then
+    echo "GATE WARNING: gate_parse.py not found or unreadable next to gate.sh; quality gate disabled (fail open)." >&2
     exit 0
 fi
 
@@ -112,7 +63,7 @@ CWD=.
 {
     read -r COMMIT_FLAG
     read -r CWD
-} < <(printf '%s' "$HOOK_JSON" | python3 -c "$PY_PARSE")
+} < <(printf '%s' "$HOOK_JSON" | python3 "$PARSER")
 
 # Non-commit commands fast-pass — including git status/log/push/add/diff.
 if [ "$COMMIT_FLAG" != "1" ]; then

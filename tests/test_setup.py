@@ -23,6 +23,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SETUP_SH = REPO_ROOT / "setup.sh"
 GATE_SH = REPO_ROOT / ".claude" / "hooks" / "gate.sh"
+GATE_PARSE = REPO_ROOT / ".claude" / "hooks" / "gate_parse.py"
 TOOL_MAP = REPO_ROOT / ".claude" / "hooks" / "tool_map.sh"
 SETUP_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "setup"
 NODE_BIN = REPO_ROOT / "node_modules" / ".bin"
@@ -131,13 +132,16 @@ def test_setup_copies_gate_and_tool_map_and_makes_gate_executable(tmp_path: Path
     proc = run_setup(target, stack="python", extra_args=("--no-install", "--no-self-verify"))
     assert proc.returncode == 0, proc.stdout + proc.stderr
     copied_gate = target / ".claude" / "hooks" / "gate.sh"
+    copied_parser = target / ".claude" / "hooks" / "gate_parse.py"
     copied_map = target / ".claude" / "hooks" / "tool_map.sh"
     assert copied_gate.is_file()
+    assert copied_parser.is_file()
     assert copied_map.is_file()
     assert os.access(copied_gate, os.X_OK), "gate.sh must be executable"
     # The copies are byte-identical to the skill's own hooks — setup must not
     # drift from the single source.
     assert copied_gate.read_text() == GATE_SH.read_text()
+    assert copied_parser.read_text() == GATE_PARSE.read_text()
     assert copied_map.read_text() == TOOL_MAP.read_text()
 
 
