@@ -49,11 +49,12 @@ no-op.
 
 ## What the flow does
 
-1. Confirm the stack (prompt or `--stack`).
-2. Select the lint/format/typecheck commands from `tool_map.sh` (single source).
-3. Detect missing tools and install them with the matching package manager
-   (`uv` for python; `pnpm`/`npm` for ts/js). Uninstallable tools produce an
-   explicit warning — never a silent failure.
+1. Confirm the stack (prompt or `--stack`), validated against the stack names
+   declared in `tool_map.sh`.
+2. Read the confirmed stacks' install specs from `tool_map.sh` (single source).
+3. Detect missing tools and install them via the map's install strategy
+   (`uv tool install` for python; probed `pnpm`/`npm` for ts/js). Uninstallable
+   tools produce an explicit warning — never a silent failure.
 4. Write the gate config: `.claude/settings.json` (PreToolUse hook +
    `QUALITY_GATE_STACK`) and copy `gate.sh` + `tool_map.sh` into
    `.claude/hooks/`, executable.
@@ -64,7 +65,8 @@ no-op.
 
 - `setup.sh` — the installer (this skill's entry point).
 - `.claude/hooks/gate.sh` — the PreToolUse hook (ADR-0001).
-- `.claude/hooks/tool_map.sh` — the one place stack -> command mapping lives.
+- `.claude/hooks/tool_map.sh` — the stack registry: the one place stack names,
+  step-chain commands, and install specs live.
 - `tests/test_gate.py`, `tests/test_setup.py` — behavior tests.
 
 ## Out of scope

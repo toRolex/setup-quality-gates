@@ -28,7 +28,8 @@
 #   * If python3 is missing the gate fails OPEN (exit 0) with a warning — a
 #     broken parser must not block every Bash tool call.
 #   * The tool commands are NOT embedded here; they live in tool_map.sh, the
-#     single tool-map source the setup flow (#4) reuses.
+#     stack registry the setup flow (#4) also reads. The gate only ever looks
+#     up lint/format/typecheck rows; install rows are invisible to it.
 
 set -u
 
