@@ -65,7 +65,13 @@ def main() -> None:
         data = json.loads(sys.stdin.read())
     except (ValueError, OSError):
         # Malformed/unreadable payload -> fail safe to "not a commit".
-        # (JSONDecodeError and UnicodeDecodeError are ValueError subclasses.)
+        # Narrowed from the heredoc's bare `except Exception` so ruff's
+        # blind-except rule passes; every reachable failure (JSONDecodeError
+        # and UnicodeDecodeError are ValueError subclasses, stdin errors are
+        # OSError) is still covered here. An uncaught exception would crash
+        # python3 with empty stdout, which gate.sh's read-the-first-line
+        # consumer still treats as "not a commit" — fail open either way, so
+        # the gate's external behavior is unchanged.
         print("0")
         print(".")
         return

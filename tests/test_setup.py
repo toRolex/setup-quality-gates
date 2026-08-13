@@ -28,11 +28,13 @@ SETUP_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "setup"
 VALID_STACKS = ("python", "ts", "js")
 
 
-def _make_target(tmp_path: Path, fixture: str) -> Path:
+def _make_target(tmp_path: Path, fixture: str, name: str | None = None) -> Path:
     """Copy a fixture into an isolated tmp dir and make it its own git repo (so
     gate.sh's repo-root detection isolates the target instead of walking up to
-    this repo, matching how the gate fixtures are set up)."""
-    target = tmp_path / fixture
+    this repo, matching how the gate fixtures are set up). ``name`` overrides
+    the directory name — used when a test needs special characters in the
+    path."""
+    target = tmp_path / (name or fixture)
     shutil.copytree(SETUP_FIXTURES / fixture, target)
     git_init(target)
     return target
@@ -277,9 +279,7 @@ def test_setup_self_verify_reaches_judgment_with_special_chars_in_target_path(tm
     # backslash) must still yield a valid self-verify payload. A hand-built
     # payload would break the JSON and the gate would silently fast-pass, so
     # self-verify must reach the real OK/LIVE judgment instead of misreporting.
-    target = tmp_path / 'proj "quoted" \' \\ back'
-    shutil.copytree(SETUP_FIXTURES / "python-dirty", target)
-    git_init(target)
+    target = _make_target(tmp_path, "python-dirty", name='proj "quoted" \' \\ back')
     proc = run_setup(target, stack="python", extra_args=("--no-install",))
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "self-verify: the quality gate chain is LIVE" in proc.stdout
