@@ -278,6 +278,21 @@ def test_setup_self_verify_blocks_on_dirty_project(
     assert expected_block in proc.stdout
 
 
+def test_setup_self_verify_reaches_judgment_with_special_chars_in_target_path(tmp_path: Path) -> None:
+    # A target path whose characters are special in JSON (space, double quote,
+    # backslash) must still yield a valid self-verify payload. A hand-built
+    # payload would break the JSON and the gate would silently fast-pass, so
+    # self-verify must reach the real OK/LIVE judgment instead of misreporting.
+    target = tmp_path / 'proj "quoted" \' \\ back'
+    shutil.copytree(SETUP_FIXTURES / "python-dirty", target)
+    subprocess.run(["git", "init", "-q"], cwd=target, check=True)
+    proc = run_setup(target, stack="python", extra_args=("--no-install",))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "self-verify: the quality gate chain is LIVE" in proc.stdout
+    assert "GATE FAILED at python:lint" in proc.stdout
+    assert "self-verify: OK" not in proc.stdout
+
+
 def test_setup_self_verify_skipped_with_flag(tmp_path: Path) -> None:
     target = _make_target(tmp_path, "python-dirty")
     proc = run_setup(target, stack="python", extra_args=("--no-install", "--no-self-verify"))

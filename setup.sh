@@ -278,7 +278,25 @@ self_verify() {
     echo "== Self-verify =="
     local abs_target payload out rc
     abs_target="$(cd "$target" && pwd)"
-    payload="{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git commit -m \\\"self-verify\\\"\"},\"cwd\":\"$abs_target\"}"
+    # Build the PreToolUse payload with python3's json serializer instead of
+    # hand-escaping: a target path that contains quotes, backslashes or other
+    # JSON specials (common on macOS/Windows) must still yield valid JSON.
+    # python3 is already a hard dependency of the setup flow; the payload
+    # schema (hook_event_name, tool_name, tool_input.command, cwd) is unchanged.
+    payload="$(python3 - "$abs_target" <<'PY'
+import json
+import sys
+
+command = 'git commit -m "self-verify"'
+payload = {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {"command": command},
+    "cwd": sys.argv[1],
+}
+print(json.dumps(payload))
+PY
+)"
     out="$(printf '%s' "$payload" | QUALITY_GATE_STACK="$stacks" bash "$target/.claude/hooks/gate.sh" 2>&1)"
     rc=$?
     if [ "$rc" -eq 0 ]; then
