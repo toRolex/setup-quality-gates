@@ -20,13 +20,10 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-SETUP_SH = REPO_ROOT / "setup.sh"
-GATE_SH = REPO_ROOT / ".claude" / "hooks" / "gate.sh"
+from conftest import GATE_SH, REPO_ROOT, SETUP_SH, TOOL_MAP, git_init, hermetic_env
+
 GATE_PARSE = REPO_ROOT / ".claude" / "hooks" / "gate_parse.py"
-TOOL_MAP = REPO_ROOT / ".claude" / "hooks" / "tool_map.sh"
 SETUP_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "setup"
-NODE_BIN = REPO_ROOT / "node_modules" / ".bin"
 
 VALID_STACKS = ("python", "ts", "js")
 
@@ -37,8 +34,7 @@ def _make_target(tmp_path: Path, fixture: str) -> Path:
     this repo, matching how the gate fixtures are set up)."""
     target = tmp_path / fixture
     shutil.copytree(SETUP_FIXTURES / fixture, target)
-    if not (target / ".git").exists():
-        subprocess.run(["git", "init", "-q"], cwd=target, check=True)
+    git_init(target)
     return target
 
 
@@ -51,18 +47,16 @@ def run_setup(
 ) -> subprocess.CompletedProcess[str]:
     """Run setup.sh against a target project.
 
-    NODE_BIN is prepended to PATH (the local TS toolchain) so ts/js stages
-    resolve to the real biome/tsc, exactly as test_gate.py does. QUALITY_GATE_STACK
-    is popped so the test never inherits a stray value.
+    The environment is hermetic exactly as test_gate.py does, via the shared
+    conftest helper: QUALITY_GATE_STACK popped and the local TS toolchain's
+    node_modules/.bin prepended to PATH so ts/js stages resolve to the real
+    biome/tsc.
     """
     cmd = ["bash", str(SETUP_SH), "--target", str(target)]
     if stack is not None:
         cmd += ["--stack", stack]
     cmd += list(extra_args)
-    full_env = dict(os.environ)
-    full_env.pop("QUALITY_GATE_STACK", None)
-    if NODE_BIN.is_dir():
-        full_env["PATH"] = f"{NODE_BIN}:{full_env['PATH']}"
+    full_env = hermetic_env()
     if env:
         full_env.update(env)
     return subprocess.run(
@@ -285,7 +279,7 @@ def test_setup_self_verify_reaches_judgment_with_special_chars_in_target_path(tm
     # self-verify must reach the real OK/LIVE judgment instead of misreporting.
     target = tmp_path / 'proj "quoted" \' \\ back'
     shutil.copytree(SETUP_FIXTURES / "python-dirty", target)
-    subprocess.run(["git", "init", "-q"], cwd=target, check=True)
+    git_init(target)
     proc = run_setup(target, stack="python", extra_args=("--no-install",))
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "self-verify: the quality gate chain is LIVE" in proc.stdout
@@ -321,8 +315,7 @@ def _tool_minus_path(tmp_path: Path, mocks: tuple[str, ...], log: Path) -> dict[
     bin_dir.mkdir(exist_ok=True)
     for name in mocks:
         _mock_tool(bin_dir, name)
-    env = dict(os.environ)
-    env.pop("QUALITY_GATE_STACK", None)
+    env = hermetic_env()
     env["PATH"] = f"{bin_dir}:/usr/bin:/bin:/usr/sbin:/sbin"
     env["MOCK_LOG"] = str(log)
     return env

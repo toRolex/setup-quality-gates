@@ -12,45 +12,25 @@ No implementation details of gate.sh are asserted.
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-GATE_SH = REPO_ROOT / ".claude" / "hooks" / "gate.sh"
-TOOL_MAP = REPO_ROOT / ".claude" / "hooks" / "tool_map.sh"
-SETUP_SH = REPO_ROOT / "setup.sh"
-PY_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "python"
-TS_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "ts"
-JS_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "js"
-BOTH_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "both"
-FIXTURE_ROOTS = (PY_FIXTURES, TS_FIXTURES, JS_FIXTURES, BOTH_FIXTURES)
-# Local TS toolchain (biome + tsc) installed at the repo root (package.json +
-# pnpm-lock.yaml). Prepended to PATH so the ts:* tool-map commands resolve to the
-# real binaries — the gate is exercised end to end, never mocked.
-NODE_BIN = REPO_ROOT / "node_modules" / ".bin"
+from conftest import (
+    BOTH_FIXTURES,
+    GATE_SH,
+    JS_FIXTURES,
+    PY_FIXTURES,
+    SETUP_SH,
+    TOOL_MAP,
+    TS_FIXTURES,
+    hermetic_env,
+    make_pre_tool_payload,
+)
 
 COMMIT_MSG = "wip"
-
-
-def _ensure_fixture_repos() -> None:
-    """Make each fixture its own git repo so gate.sh's repo-root detection isolates
-    the fixture instead of walking up to this repo. The fixture `.git` dirs are
-    gitignored and not versioned, so a fresh clone ships without them; tests
-    (re)create them on demand. Idempotent. Applies to every fixture group
-    (python, ts, both)."""
-    for root in FIXTURE_ROOTS:
-        for fixture in root.iterdir():
-            if not fixture.is_dir():
-                continue
-            if not (fixture / ".git").exists():
-                subprocess.run(["git", "init", "-q"], cwd=fixture, check=True)
-
-
-_ensure_fixture_repos()
 
 
 def run_gate(
@@ -65,18 +45,10 @@ def run_gate(
     ``stack`` maps to the QUALITY_GATE_STACK env var (None = unset, so gate.sh's
     default single-stack ``python`` applies). ``fixtures`` selects the fixture group.
     """
-    payload = {
-        "hook_event_name": "PreToolUse",
-        "tool_name": tool_name,
-        "tool_input": {"command": command},
-        "cwd": str(fixtures / fixture),
-    }
-    env = dict(os.environ)
-    env.pop("QUALITY_GATE_STACK", None)  # hermetic: don't inherit the caller's setting
+    payload = make_pre_tool_payload(command, tool_name=tool_name, cwd=str(fixtures / fixture))
+    env = hermetic_env()
     if stack is not None:
         env["QUALITY_GATE_STACK"] = stack
-    if NODE_BIN.is_dir():
-        env["PATH"] = f"{NODE_BIN}:{env['PATH']}"
     return subprocess.run(
         ["bash", str(GATE_SH)],
         input=json.dumps(payload),
@@ -206,12 +178,7 @@ def test_missing_parser_fails_open(tmp_path: Path) -> None:
     isolated.mkdir()
     shutil.copy(GATE_SH, isolated / "gate.sh")
     shutil.copy(TOOL_MAP, isolated / "tool_map.sh")
-    payload = {
-        "hook_event_name": "PreToolUse",
-        "tool_name": "Bash",
-        "tool_input": {"command": f'git commit -m "{COMMIT_MSG}"'},
-        "cwd": str(PY_FIXTURES / "lint-dirty"),
-    }
+    payload = make_pre_tool_payload(f'git commit -m "{COMMIT_MSG}"', cwd=str(PY_FIXTURES / "lint-dirty"))
     proc = subprocess.run(
         ["bash", str(isolated / "gate.sh")],
         input=json.dumps(payload),
