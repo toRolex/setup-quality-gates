@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="400" viewBox="0 0 1200 400"
+     role="img" aria-labelledby="title desc">
+  <title id="title">setup-quality-gates — a red REJECTED stamp on a failed commit, blocked by the lint gate</title>
+  <desc id="desc">A Claude Code skill. The moment a commit is blocked: a terminal shows GATE FAILED at python:lint (ruff found an unused import), a red REJECTED stamp is pressed onto the report, and the bottom step-chain rail shows lint and format green while typecheck is still pending.</desc>
+
+  <rect width="1200" height="400" rx="24" fill="#0A0C0F"/>
+
+  <!-- top bar -->
+  <text x="56" y="42" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="13" fill="#8B949E" letter-spacing="2">CLAUDE CODE SKILL · COMMIT-TIME QUALITY GATE</text>
+  <text x="1144" y="42" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="13" fill="#8B949E">fail-closed · exit 2</text>
+
+  <!-- title -->
+  <text x="56" y="96" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="52" font-weight="800" fill="#E6E8EB" letter-spacing="-1">setup-quality-gates</text>
+
+  <!-- spec line -->
+  <text x="56" y="124" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="14" fill="#8B949E">hook=PreToolUse · step chain=lint→format→typecheck · stacks=python,ts,js</text>
+
+  <!-- terminal: the moment a commit is rejected -->
+  <rect x="56" y="150" width="744" height="192" rx="10" fill="#10151A" stroke="#1F2730" stroke-width="1"/>
+  <circle cx="76" cy="170" r="4" fill="#2A333D"/>
+  <circle cx="94" cy="170" r="4" fill="#2A333D"/>
+  <circle cx="112" cy="170" r="4" fill="#2A333D"/>
+  <text x="428" y="174" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12" fill="#5A6470">gate.sh — commit interception</text>
+  <line x1="72" y1="188" x2="764" y2="188" stroke="#1F2730" stroke-width="1"/>
+
+  <text x="76" y="216" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="17" fill="#E6E8EB">$ git commit -m "wip"</text>
+  <text x="76" y="272" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="21" font-weight="700" fill="#FF5A52">GATE FAILED</text>
+  <text x="76" y="300" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="16" fill="#9DA7B3">  at python:lint · ruff check .</text>
+  <text x="76" y="326" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="16" fill="#9DA7B3">  F401 'os' imported but unused</text>
+
+  <!-- red rejection stamp pressed onto the report -->
+  <g transform="translate(860 252) rotate(-10)">
+    <circle r="78" fill="#FF5A52"/>
+    <circle r="68" fill="none" stroke="#FFFFFF" stroke-width="2" opacity="0.85"/>
+    <text x="0" y="-36" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12" fill="#FFFFFF" letter-spacing="2">QUALITY GATE</text>
+    <text x="0" y="12" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="26" font-weight="800" fill="#FFFFFF" letter-spacing="1">REJECTED</text>
+    <text x="0" y="48" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="13" fill="#FFFFFF">commit #1042</text>
+  </g>
+
+  <!-- right column: per-stage signal lights -->
+  <circle cx="990" cy="180" r="15" fill="#0F2216" stroke="#3FB950" stroke-width="2"/>
+  <circle cx="990" cy="180" r="10" fill="#3FB950"/>
+  <path d="M 984.5 180 L 988 183.5 L 995.5 176" fill="none" stroke="#0A0C0F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="1014" y="185" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="13" fill="#E6E8EB">lint</text>
+
+  <circle cx="990" cy="240" r="15" fill="#0F2216" stroke="#3FB950" stroke-width="2"/>
+  <circle cx="990" cy="240" r="10" fill="#3FB950"/>
+  <path d="M 984.5 240 L 988 243.5 L 995.5 236" fill="none" stroke="#0A0C0F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="1014" y="245" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="13" fill="#E6E8EB">format</text>
+
+  <circle cx="990" cy="300" r="15" fill="#2A1210" stroke="#FF5A52" stroke-width="2"/>
+  <circle cx="990" cy="300" r="10" fill="#FF5A52"/>
+  <path d="M 985.5 295 L 994.5 305 M 994.5 295 L 985.5 305" stroke="#0A0C0F" stroke-width="2" stroke-linecap="round"/>
+  <text x="1014" y="305" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="13" fill="#FF5A52">typecheck</text>
+
+  <!-- bottom step-chain rail -->
+  <line x1="56" y1="366" x2="1144" y2="366" stroke="#2A333D" stroke-width="1.5"/>
+  <line x1="56" y1="366" x2="786" y2="366" stroke="#3FB950" stroke-width="1.5"/>
+  <line x1="786" y1="366" x2="1144" y2="366" stroke="#2A333D" stroke-width="1.5" stroke-dasharray="5 6"/>
+  <circle cx="140" cy="366" r="5" fill="#0A0C0F" stroke="#3FB950" stroke-width="2"/>
+  <path d="M 137 366 L 139.5 368.5 L 143 364" fill="none" stroke="#3FB950" stroke-width="2"/>
+  <circle cx="460" cy="366" r="5" fill="#0A0C0F" stroke="#3FB950" stroke-width="2"/>
+  <path d="M 457 366 L 459.5 368.5 L 463 364" fill="none" stroke="#3FB950" stroke-width="2"/>
+  <circle cx="780" cy="366" r="5" fill="#0A0C0F" stroke="#FF5A52" stroke-width="2"/>
+  <path d="M 776.5 362.5 L 783.5 369.5 M 783.5 362.5 L 776.5 369.5" stroke="#FF5A52" stroke-width="2"/>
+  <text x="140" y="388" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12" fill="#8B949E">lint</text>
+  <text x="460" y="388" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12" fill="#8B949E">format</text>
+  <text x="780" y="388" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12" fill="#FF5A52">typecheck</text>
+  <text x="1144" y="388" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12" fill="#5A6470">next commit →</text>
+</svg>
