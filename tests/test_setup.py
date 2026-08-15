@@ -184,6 +184,55 @@ def test_setup_is_idempotent_on_rerun(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# fail-closed settings.json merging: invalid configs are refused, never
+# clobbered; the written bytes keep setup's own artifact biome-clean
+# ---------------------------------------------------------------------------
+
+
+def _write_existing_settings(target: Path, content: str) -> None:
+    settings_dir = target / ".claude"
+    settings_dir.mkdir(exist_ok=True)
+    (settings_dir / "settings.json").write_text(content)
+
+
+@pytest.mark.parametrize(
+    ("content", "marker"),
+    [
+        ("{ not valid json", "not valid JSON"),
+        ("[1, 2, 3]", "not a JSON object"),
+        ('{"hooks": {"PreToolUse": "oops"}}', "hooks.PreToolUse that is not a list"),
+    ],
+)
+def test_setup_refuses_invalid_existing_settings(
+    tmp_path: Path, content: str, marker: str
+) -> None:
+    # A broken/hand-written .claude/settings.json must never be overwritten:
+    # setup exits 2 with an explicit "refusing to overwrite" and the file is
+    # left byte-identical.
+    target = _make_target(tmp_path, "python-clean")
+    _write_existing_settings(target, content)
+    proc = run_setup(target, stack="python", extra_args=("--no-install", "--no-self-verify"))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert marker in proc.stderr
+    assert "refusing to overwrite" in proc.stderr
+    assert (target / ".claude" / "settings.json").read_text() == content
+
+
+def test_setup_writes_tab_indented_settings_with_trailing_newline(tmp_path: Path) -> None:
+    # The written bytes matter: biome's format stage (tabs by default) must not
+    # flag setup's own settings.json on the very first commit. The other tests
+    # only json.loads the result back, so this contract is locked explicitly.
+    target = _make_target(tmp_path, "python-clean")
+    proc = run_setup(target, stack="python", extra_args=("--no-install", "--no-self-verify"))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    raw = (target / ".claude" / "settings.json").read_text()
+    indented = [line for line in raw.splitlines()[1:] if line[:1] in ("\t", " ")]
+    assert indented, "settings.json must contain indented lines"
+    assert all(line.startswith("\t") for line in indented)
+    assert raw.endswith("\n")
+
+
+# ---------------------------------------------------------------------------
 # stack confirmation: user declaration is authoritative, never auto-detected
 # ---------------------------------------------------------------------------
 

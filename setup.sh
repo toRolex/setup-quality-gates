@@ -188,82 +188,9 @@ install_tools() {
 # settings.json is merged, not clobbered; the gate entry is replaced on re-run.
 write_settings() {
     local target="$1" stack="$2"
-    local script
-    script=$(cat <<'PY'
-import json
-import os
-import sys
-
-target, stack = sys.argv[1], sys.argv[2]
-settings_path = os.path.join(target, ".claude", "settings.json")
-
-if os.path.exists(settings_path):
-    with open(settings_path, encoding="utf-8") as f:
-        try:
-            data = json.load(f)
-        except json.JSONDecodeError as exc:
-            print(f"setup: existing {settings_path} is not valid JSON ({exc}); refusing to overwrite. Fix or remove it, then re-run.", file=sys.stderr)
-            sys.exit(2)
-    if not isinstance(data, dict):
-        print(f"setup: existing {settings_path} is not a JSON object; refusing to overwrite.", file=sys.stderr)
-        sys.exit(2)
-else:
-    data = {}
-
-data.setdefault("env", {})["QUALITY_GATE_STACK"] = stack
-
-gate_entry = {
-    "matcher": "Bash",
-    "hooks": [
-        {
-            "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/gate.sh",
-            "args": [],
-            "timeout": 120,
-        }
-    ],
-}
-
-pretool = data.setdefault("hooks", {}).setdefault("PreToolUse", [])
-if not isinstance(pretool, list):
-    print(f"setup: existing {settings_path} has hooks.PreToolUse that is not a list; refusing to overwrite.", file=sys.stderr)
-    sys.exit(2)
-
-replaced = False
-kept = []
-for entry in pretool:
-    is_gate = (
-        isinstance(entry, dict)
-        and entry.get("matcher") == "Bash"
-        and isinstance(entry.get("hooks"), list)
-        and any(
-            isinstance(h, dict)
-            and isinstance(h.get("command"), str)
-            and h["command"].endswith("/.claude/hooks/gate.sh")
-            for h in entry["hooks"]
-        )
-    )
-    if is_gate:
-        if not replaced:
-            kept.append(gate_entry)
-            replaced = True
-        # duplicate gate entries from a previous run are dropped
-    else:
-        kept.append(entry)
-if not replaced:
-    kept.append(gate_entry)
-data["hooks"]["PreToolUse"] = kept
-
-with open(settings_path, "w", encoding="utf-8") as f:
-    # Tab-indent on purpose: the TS/JS gate's biome format stage (a tool-map
-    # command) uses tabs by default and would flag a space-indented
-    # settings.json on the very first commit. Writing tabs keeps
-    # setup's own artifact clean under the gate it installs.
-    json.dump(data, f, indent="\t")
-    f.write("\n")
-PY
-)
-    if ! python3 -c "$script" "$target" "$stack"; then
+    # The merge logic lives in settings_writer.py next to this script (issue
+    # #10, T8) so it is covered by ruff/ty instead of an inline heredoc.
+    if ! python3 "$SRC_SETTINGS_WRITER" "$target/.claude/settings.json" "$stack"; then
         return 1
     fi
     echo "  wrote $target/.claude/settings.json"
@@ -363,9 +290,10 @@ main() {
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     SRC_GATE="$SCRIPT_DIR/.claude/hooks/gate.sh"
     SRC_GATE_PARSE="$SCRIPT_DIR/.claude/hooks/gate_parse.py"
+    SRC_SETTINGS_WRITER="$SCRIPT_DIR/.claude/hooks/settings_writer.py"
     SRC_TOOL_MAP="$SCRIPT_DIR/.claude/hooks/tool_map.sh"
-    if [ ! -f "$SRC_GATE" ] || [ ! -f "$SRC_GATE_PARSE" ] || [ ! -f "$SRC_TOOL_MAP" ]; then
-        echo "setup: cannot find gate.sh/gate_parse.py/tool_map.sh next to setup.sh ($SCRIPT_DIR/.claude/hooks/)" >&2
+    if [ ! -f "$SRC_GATE" ] || [ ! -f "$SRC_GATE_PARSE" ] || [ ! -f "$SRC_SETTINGS_WRITER" ] || [ ! -f "$SRC_TOOL_MAP" ]; then
+        echo "setup: cannot find gate.sh/gate_parse.py/settings_writer.py/tool_map.sh next to setup.sh ($SCRIPT_DIR/.claude/hooks/)" >&2
         exit 2
     fi
 
